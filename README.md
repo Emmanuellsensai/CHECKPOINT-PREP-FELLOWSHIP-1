@@ -1,4 +1,4 @@
-# Checkpoint Study Guide — go-reloaded · ascii-art · ascii-art-web
+# Checkpoint Study Guide - go-reloaded · ascii-art · ascii-art-web
 
 > Goal: not to memorize, but to understand each project deeply enough to **rebuild it from a blank file** and **explain every function out loud**.
 
@@ -8,21 +8,21 @@
 
 The checkpoint tests two skills:
 
-1. **Explain** — "Walk me through your project. What does this function do? Why is it here?"
-2. **Write** — "Implement X from scratch right now."
+1. **Explain** - "Walk me through your project. What does this function do? Why is it here?"
+2. **Write** - "Implement X from scratch right now."
 
 Reading this guide passively will trick your brain into thinking you know it. You don't, until you can reproduce it. So for every section:
 
 1. Read the code and the *why*.
 2. **Close the guide.**
 3. Rewrite the function on paper or in an empty file from memory.
-4. Open the guide and compare. Wherever you guessed, that's your weak spot — repeat it.
+4. Open the guide and compare. Wherever you guessed, that's your weak spot - repeat it.
 
 This is called **active recall**. It feels harder than re-reading. That difficulty *is* the learning.
 
 ---
 
-## The checkpoint mindset — what examiners actually probe
+## The checkpoint mindset - what examiners actually probe
 
 They rarely ask "does it run." They ask:
 
@@ -35,7 +35,7 @@ Rule: **you must be able to explain every single line.** A clever line you can't
 
 ---
 
-# PROJECT 1 — go-reloaded
+# PROJECT 1 - go-reloaded
 
 ## Mission (one sentence)
 
@@ -65,9 +65,9 @@ go run . input.txt output.txt
 
 Think in **3 phases**:
 
-1. **Tokenize** — break the text into words.
-2. **Apply markers** — markers like `(up)` act on the *word(s) before them*, then the marker itself disappears.
-3. **Fix spacing rules** — punctuation, quotes, and `a`/`an` are applied to the rejoined string.
+1. **Tokenize** - break the text into words.
+2. **Apply markers** - markers like `(up)` act on the *word(s) before them*, then the marker itself disappears.
+3. **Fix spacing rules** - punctuation, quotes, and `a`/`an` are applied to the rejoined string.
 
 ## Function map (this is the breakdown they'll ask for)
 
@@ -87,7 +87,7 @@ Each function does **one thing**. That sentence is your answer when they ask "wh
 
 ## The code
 
-### `main` — the entry point
+### `main` - the entry point
 
 ```go
 package main
@@ -123,7 +123,7 @@ func main() {
 
 **Why explain-ready:** `os.Args` holds command-line arguments; `os.Args[0]` is the program name, so we need length 3 for two filenames. `os.ReadFile` returns `[]byte`, so we convert to `string`. `0644` is the file permission (owner read/write, others read).
 
-### `process` — the orchestrator
+### `process` - the orchestrator
 
 ```go
 func process(text string) string {
@@ -231,7 +231,7 @@ func capitalize(s string) string {
 }
 ```
 
-### Spacing rules (the fiddly part — be honest about edge cases)
+### Spacing rules (the fiddly part - be honest about edge cases)
 
 ```go
 func fixPunctuation(text string) string {
@@ -268,16 +268,16 @@ func isVowelOrH(c byte) bool {
 }
 ```
 
-> **Honest note:** this punctuation/quote handling is the *clean, explainable* version and passes the common cases. The full spec has nastier edges (punctuation groups like `...` or `!?`, multiple quoted phrases in one line). If you have time, harden these — but for explaining your logic, this structure is exactly what they want to see, and you can say "I handle the standard cases here; the grouped-punctuation edge case would need a character-by-character scan."
+> **Honest note:** this punctuation/quote handling is the *clean, explainable* version and passes the common cases. The full spec has nastier edges (punctuation groups like `...` or `!?`, multiple quoted phrases in one line). If you have time, harden these - but for explaining your logic, this structure is exactly what they want to see, and you can say "I handle the standard cases here; the grouped-punctuation edge case would need a character-by-character scan."
 
 ## Tricky bits checklist
 
 - Markers act on **previous** words, not following ones.
 - `(up, 2)` arrives as **two tokens** after `strings.Fields`: `(up,` and `2)`.
-- Editing a slice element inside a function is **permanent** (slices share memory) — that's why `applyAction` works without returning anything.
-- `strconv.ParseInt` returns `(value, error)` — always handle the error.
+- Editing a slice element inside a function is **permanent** (slices share memory) - that's why `applyAction` works without returning anything.
+- `strconv.ParseInt` returns `(value, error)` - always handle the error.
 
-## Practice — EXPLAIN IT (answer out loud)
+## Practice - EXPLAIN IT (answer out loud)
 
 1. Why do we apply markers to `out` and not to `words`?
 2. What does `strconv.ParseInt("FF", 16, 64)` return, and what type?
@@ -285,7 +285,7 @@ func isVowelOrH(c byte) bool {
 4. Walk through `process` on the input: `a amazing thing (up, 2)`.
 5. What's `os.Args[0]`, and why do we check `len(os.Args) != 3`?
 
-## Practice — WRITE IT (blank file, no peeking)
+## Practice - WRITE IT (blank file, no peeking)
 
 1. Write `hexToDec` and `binToDec` from scratch.
 2. Write `capitalize` so `"hELLo"` → `"Hello"`.
@@ -294,7 +294,7 @@ func isVowelOrH(c byte) bool {
 
 ---
 
-# PROJECT 2 — ascii-art
+# PROJECT 2 - ascii-art
 
 ## Mission (one sentence)
 
@@ -402,12 +402,12 @@ func printLine(text string, banner []string) {
 
 ## Tricky bits checklist
 
-- The file **starts with a blank line** — forget the `+1` and everything shifts up by one row (you'll print garbage). This is the #1 bug.
+- The file **starts with a blank line** - forget the `+1` and everything shifts up by one row (you'll print garbage). This is the #1 bug.
 - Input `\n` is **two characters** in the argument, so you split on `"\\n"` (escaped backslash) in Go source.
 - Output is **row-major**: outer loop = 8 rows, inner loop = each character.
-- Only ASCII 32–126 exist in the file. Anything outside (like a tab or emoji) will index out of range — that's why ascii-art-web later validates input.
+- Only ASCII 32-126 exist in the file. Anything outside (like a tab or emoji) will index out of range - that's why ascii-art-web later validates input.
 
-## Practice — EXPLAIN IT
+## Practice - EXPLAIN IT
 
 1. Derive the `(int(c) - 32) * 9 + 1` formula from scratch.
 2. Why does the outer loop run exactly 8 times?
@@ -415,7 +415,7 @@ func printLine(text string, banner []string) {
 4. What breaks if you forget the `+ 1`?
 5. How does the program produce a line break from input like `"a\nb"`?
 
-## Practice — WRITE IT
+## Practice - WRITE IT
 
 1. Write `printLine` from a blank file.
 2. Write just the indexing line and explain each term.
@@ -423,7 +423,7 @@ func printLine(text string, banner []string) {
 
 ---
 
-# PROJECT 3 — ascii-art-web
+# PROJECT 3 - ascii-art-web
 
 ## Mission (one sentence)
 
@@ -531,7 +531,7 @@ In Go, the pattern `"/"` matches **every** path that no other handler claims. So
 **2. Why must headers come before the body?**
 Once you write any body bytes, Go automatically sends a `200 OK` header. After that you **cannot** change the status code. So you must call `http.Error` / `w.WriteHeader(...)` **before** writing content. Getting this backwards means your 404 silently becomes a 200.
 
-## 404 vs 405 — say the difference cleanly
+## 404 vs 405 - say the difference cleanly
 
 - **404 Not Found** → the *path* doesn't exist (`/banana`).
 - **405 Method Not Allowed** → the path exists but you used the *wrong verb* (GET on `/ascii-art`, which only takes POST).
@@ -539,20 +539,20 @@ Once you write any body bytes, Go automatically sends a `200 OK` header. After t
 ## Tricky bits checklist
 
 - `r.FormValue` works for POST form fields; the field name must match the `name=""` in your HTML `<input>`/`<select>`.
-- Use `html/template`, **not** `text/template` — the `html` one auto-escapes and is safe for web output.
+- Use `html/template`, **not** `text/template` - the `html` one auto-escapes and is safe for web output.
 - The `PageData` struct field must be **capitalized** (`Art`, not `art`) or the template can't see it (Go exports only capitalized fields).
 - Static files: `http.StripPrefix` removes `/static/` so `http.Dir("static")` finds the real file.
 
-## Practice — EXPLAIN IT
+## Practice - EXPLAIN IT
 
 1. Why do you check `r.URL.Path != "/"` inside `homeHandler`?
-2. Difference between 404 and 405 — give an example URL for each.
+2. Difference between 404 and 405 - give an example URL for each.
 3. Why must `http.Error` be called before writing any page content?
 4. Why is the struct field `Art` capitalized?
 5. What does `http.StripPrefix` do and why is it needed for static files?
 6. Why `html/template` and not `text/template`?
 
-## Practice — WRITE IT
+## Practice - WRITE IT
 
 1. Write `main` with all three route registrations from memory.
 2. Write `homeHandler` with both guards.
@@ -566,7 +566,7 @@ Once you write any body bytes, Go automatically sends a `200 OK` header. After t
 These show up regardless of which project:
 
 - **Slices share memory.** Passing a slice to a function and editing its elements changes the original. (Why `applyAction` works.)
-- **Multiple return values & errors.** `v, err := f()` — always check `err`. Never ignore it in code you'll defend.
+- **Multiple return values & errors.** `v, err := f()` - always check `err`. Never ignore it in code you'll defend.
 - **`strings` toolkit:** `Split`, `Fields`, `Join`, `ReplaceAll`, `ToUpper`, `ToLower`, `TrimSuffix`, `HasPrefix`, `Contains`.
 - **`strconv`:** `ParseInt(s, base, bits)`, `Atoi(s)`, `FormatInt(n, base)`.
 - **Runes vs bytes:** `for _, c := range s` gives runes (good for characters); `s[i]` gives a single byte.
@@ -575,7 +575,7 @@ These show up regardless of which project:
 
 ---
 
-# Your 2-day plan (Wed–Thu, checkpoint Fri)
+# Your 2-day plan (Wed-Thu, checkpoint Fri)
 
 **Wednesday**
 - Morning: go-reloaded. Read the section once, then rewrite every function from a blank file. Run it against the example table.
@@ -583,7 +583,7 @@ These show up regardless of which project:
 
 **Thursday**
 - Morning: ascii-art-web. Rewrite all three handlers from memory. Be able to recite the route table and status codes.
-- Afternoon: mixed drilling — answer every "EXPLAIN IT" question out loud as if facing the examiner. Re-do any "WRITE IT" you stumbled on.
+- Afternoon: mixed drilling - answer every "EXPLAIN IT" question out loud as if facing the examiner. Re-do any "WRITE IT" you stumbled on.
 
 **Friday morning (light)**
 - Skim the three "Tricky bits" checklists.
@@ -593,4 +593,4 @@ These show up regardless of which project:
 
 ---
 
-*Built for your Friday checkpoint. You don't need to memorize this — you need to be able to rebuild it. Close the guide and prove you can.*
+*Built for your Friday checkpoint. You don't need to memorize this - you need to be able to rebuild it. Close the guide and prove you can.*
