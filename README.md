@@ -346,9 +346,12 @@ To draw a word, you **print it row by row, not letter by letter.** For row 0, yo
 ## Function map
 
 ```
-main()                  -> parse args, read banner, handle \n, call printLine
-printLine(text, banner) -> prints one line of input as 8 rows of ASCII art
+main()                  -> parse args, read banner, build map, handle \n, call printLine
+buildMap(content)       -> turns the file into a lookup table: char -> its 8 art lines
+printLine(text, art)    -> prints one line of input as 8 rows of ASCII art
 ```
+
+The map is the heart of this project. `buildMap` is the only function that understands the file format; `printLine` just looks characters up and renders. One job each.
 
 ## The code
 
@@ -373,16 +376,30 @@ func main() {
 		fmt.Println("Error:", err)
 		return
 	}
-	banner := strings.Split(string(data), "\n") // each element is one line of the file
+
+	art := buildMap(string(data)) // build the lookup table once
 
 	// The user types \n (backslash-n) to request a line break.
 	// In the argument it is the two characters: '\' and 'n'.
 	for _, segment := range strings.Split(input, "\\n") {
-		printLine(segment, banner)
+		printLine(segment, art)
 	}
 }
 
-func printLine(text string, banner []string) {
+// buildMap turns the banner file into a lookup table:
+// each character -> its 8 lines of ASCII art.
+func buildMap(content string) map[rune][]string {
+	lines := strings.Split(content, "\n")
+	art := make(map[rune][]string)
+
+	for c := 32; c <= 126; c++ {
+		start := (c-32)*9 + 1                 // where this char's art begins
+		art[rune(c)] = lines[start : start+8] // its 8 lines, stored under the char
+	}
+	return art
+}
+
+func printLine(text string, art map[rune][]string) {
 	if text == "" {
 		fmt.Println() // empty segment -> just a blank line
 		return
@@ -390,36 +407,43 @@ func printLine(text string, banner []string) {
 	for row := 0; row < 8; row++ { // 8 rows make up one line of art
 		line := ""
 		for _, char := range text {
-			start := (int(char)-32)*9 + 1 // first art line for this char
-			line += banner[start+row]     // glue this char's current row on
+			line += art[char][row] // look the char up, take this row
 		}
 		fmt.Println(line)
 	}
 }
 ```
 
-**Line they'll point at:** `line += banner[start+row]`. Explain: "I'm building one output row by concatenating the same row from each character's 8-line block."
+**Line they'll point at:** `line += art[char][row]`. Explain: "I look up this character's 8-line art block in the map, then take row `row` of it, gluing the same row from each character side by side."
+
+**Why a map instead of indexing into the file every time:** the lookup table is built **once** in `buildMap`, so each character lookup afterwards is instant (`art[char]`). It also separates concerns: only `buildMap` knows the 9-line file layout, and `printLine` stays simple. The formula `(c-32)*9 + 1` still runs, but only while filling the table.
+
+**`lines[start : start+8]`** is a slice holding exactly 8 lines (`start` through `start+7`). That slice is the value stored for each character.
 
 ## Tricky bits checklist
 
 - The file **starts with a blank line** - forget the `+1` and everything shifts up by one row (you'll print garbage). This is the #1 bug.
 - Input `\n` is **two characters** in the argument, so you split on `"\\n"` (escaped backslash) in Go source.
 - Output is **row-major**: outer loop = 8 rows, inner loop = each character.
-- Only ASCII 32-126 exist in the file. Anything outside (like a tab or emoji) will index out of range - that's why ascii-art-web later validates input.
+- Only ASCII 32-126 exist in the file. Anything outside (like a tab or emoji) won't be in the map (and would index out of range when building it) - that's why ascii-art-web later validates input.
+- The map value is a **slice of 8 strings**, not one string. `art[char]` gives the whole block; `art[char][row]` gives one row.
 
 ## Practice - EXPLAIN IT
 
 1. Derive the `(int(c) - 32) * 9 + 1` formula from scratch.
-2. Why does the outer loop run exactly 8 times?
-3. Why is the inner loop over characters and the outer loop over rows, not the other way round?
-4. What breaks if you forget the `+ 1`?
-5. How does the program produce a line break from input like `"a\nb"`?
+2. Why use a map at all? What does it buy you over recomputing the index every time?
+3. What type is the value stored in the map, and why a slice of 8 and not one string?
+4. Why does the outer loop run exactly 8 times?
+5. Why is the inner loop over characters and the outer loop over rows, not the other way round?
+6. What breaks if you forget the `+ 1` when building the map?
+7. How does the program produce a line break from input like `"a\nb"`?
 
 ## Practice - WRITE IT
 
-1. Write `printLine` from a blank file.
-2. Write just the indexing line and explain each term.
-3. Modify `main` to accept a second argument for the banner name (`standard`, `shadow`, `thinkertoy`) and read `name + ".txt"`.
+1. Write `buildMap` from a blank file. Explain the `lines[start : start+8]` part.
+2. Write `printLine` from a blank file.
+3. Write just the indexing line inside `buildMap` and explain each term.
+4. Modify `main` to accept a second argument for the banner name (`standard`, `shadow`, `thinkertoy`) and read `name + ".txt"`.
 
 ---
 
@@ -579,7 +603,7 @@ These show up regardless of which project:
 
 **Wednesday**
 - Morning: go-reloaded. Read the section once, then rewrite every function from a blank file. Run it against the example table.
-- Afternoon: ascii-art. Derive the formula 5 times until it's automatic. Rewrite `printLine` from scratch.
+- Afternoon: ascii-art. Derive the formula 5 times until it's automatic. Rewrite `buildMap` and `printLine` from scratch.
 
 **Thursday**
 - Morning: ascii-art-web. Rewrite all three handlers from memory. Be able to recite the route table and status codes.
