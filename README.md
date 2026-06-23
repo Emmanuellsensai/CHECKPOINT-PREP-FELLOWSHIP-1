@@ -405,16 +405,18 @@ func printLine(text string, art map[rune][]string) {
 		return
 	}
 	for row := 0; row < 8; row++ { // 8 rows make up one line of art
-		line := ""
+		var line strings.Builder         // a fresh notepad for this row
 		for _, char := range text {
-			line += art[char][row] // look the char up, take this row
+			line.WriteString(art[char][row]) // write this char's row onto it
 		}
-		fmt.Println(line)
+		fmt.Println(line.String())       // tear off the finished string
 	}
 }
 ```
 
-**Line they'll point at:** `line += art[char][row]`. Explain: "I look up this character's 8-line art block in the map, then take row `row` of it, gluing the same row from each character side by side."
+**Line they'll point at:** `line.WriteString(art[char][row])`. Explain: "I look up this character's 8-line art block in the map, then write row `row` of it onto a `strings.Builder`, gluing the same row from each character side by side."
+
+**Why `strings.Builder` and not `line += ...`:** strings in Go are immutable, so `+=` in a loop throws away the old string and allocates a brand-new one every iteration. `strings.Builder` writes into one growing buffer (`WriteString`) and produces the final string once at the end (`.String()`), so it avoids all those wasted copies. Use `+=` for one or two joins; use `Builder` when appending in a loop.
 
 **Why a map instead of indexing into the file every time:** the lookup table is built **once** in `buildMap`, so each character lookup afterwards is instant (`art[char]`). It also separates concerns: only `buildMap` knows the 9-line file layout, and `printLine` stays simple. The formula `(c-32)*9 + 1` still runs, but only while filling the table.
 
@@ -432,7 +434,8 @@ func printLine(text string, art map[rune][]string) {
 
 1. Derive the `(int(c) - 32) * 9 + 1` formula from scratch.
 2. Why use a map at all? What does it buy you over recomputing the index every time?
-3. What type is the value stored in the map, and why a slice of 8 and not one string?
+3. Why `strings.Builder` instead of `line += ...` in the row loop? (Hint: strings are immutable.)
+4. What type is the value stored in the map, and why a slice of 8 and not one string?
 4. Why does the outer loop run exactly 8 times?
 5. Why is the inner loop over characters and the outer loop over rows, not the other way round?
 6. What breaks if you forget the `+ 1` when building the map?
