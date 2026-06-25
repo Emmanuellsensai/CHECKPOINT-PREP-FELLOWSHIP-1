@@ -63,234 +63,218 @@ go run . input.txt output.txt
 
 ## Mental model
 
-Think in **3 phases**:
+`main` is a **pipeline**. Read the file, then push the text through three stages in order, then write it out:
 
-1. **Tokenize** - break the text into words.
-2. **Apply markers** - markers like `(up)` act on the *word(s) before them*, then the marker itself disappears.
-3. **Fix spacing rules** - punctuation, quotes, and `a`/`an` are applied to the rejoined string.
+```
+text -> checkFlags -> checkPunctuations -> checkVowels -> output
+```
+
+Each stage takes a string and returns a string. That sentence is your answer when they ask "how is your project structured?"
+
+- **checkFlags** handles the markers: `(hex)`, `(bin)`, `(up)`, `(low)`, `(cap)`, and `(up, 2)`. Works on **words**.
+- **checkPunctuations** fixes spacing around `. , ! ? : ;` and single quotes. Works on **characters**.
+- **checkVowels** changes `a` to `an` before a vowel or `h`. Works on **words**.
 
 ## Function map (this is the breakdown they'll ask for)
 
 ```
-main()              -> reads args, reads file, calls process(), writes file
-process(text)       -> orchestrates the 3 phases, returns final string
-applyAction(...)    -> mutates the last n words (up/low/cap/hex/bin)
-hexToDec(s)         -> "1E" -> "30"
-binToDec(s)         -> "10" -> "2"
-capitalize(s)       -> "bridge" -> "Bridge"
-fixPunctuation(s)   -> " ." -> "."
-fixQuotes(s)        -> "' x '" -> "'x'"
-fixArticles(s)      -> "a apple" -> "an apple"
+main()                 -> read args, read file, run the 3 stages, write file
+checkFlags(text)       -> apply (up)/(low)/(cap)/(hex)/(bin) to previous word(s)
+checkPunctuations(text)-> no space before punctuation, one space after; fix quotes
+checkVowels(text)      -> "a apple" -> "an apple"
 ```
-
-Each function does **one thing**. That sentence is your answer when they ask "why so many functions?"
 
 ## The code
 
-### `main` - the entry point
+### `main` - the pipeline
 
 ```go
-package main
-
-import (
-	"fmt"
-	"os"
-	"strconv"
-	"strings"
-)
-
 func main() {
-	// Expect exactly: program input.txt output.txt
-	if len(os.Args) != 3 {
-		fmt.Println("Usage: go run . input.txt output.txt")
+	if len(os.Args) != 3 { // program + input file + output file
 		return
 	}
+	inputfile := os.Args[1]
+	outputfile := os.Args[2]
 
-	data, err := os.ReadFile(os.Args[1]) // read the whole input file
+	data, err := os.ReadFile(inputfile) // returns bytes
 	if err != nil {
 		fmt.Println("Error reading file:", err)
 		return
 	}
 
-	result := process(string(data)) // do all the work
+	text := string(data)            // bytes -> string
+	text = checkFlags(text)         // stage 1: markers
+	text = checkPunctuations(text)  // stage 2: spacing + quotes
+	text = checkVowels(text)        // stage 3: a -> an
 
-	err = os.WriteFile(os.Args[2], []byte(result), 0644) // 0644 = rw-r--r--
+	err = os.WriteFile(outputfile, []byte(text), 0644) // 0644 = rw-r--r--
 	if err != nil {
 		fmt.Println("Error writing file:", err)
 	}
 }
 ```
 
-**Why explain-ready:** `os.Args` holds command-line arguments; `os.Args[0]` is the program name, so we need length 3 for two filenames. `os.ReadFile` returns `[]byte`, so we convert to `string`. `0644` is the file permission (owner read/write, others read).
+**Say it out loud:** "I read the file into a string, pass it through three transformation functions one after another, then write the final string back out. Each function does one job."
 
-### `process` - the orchestrator
+### `checkFlags` - the markers (works on words)
 
 ```go
-func process(text string) string {
-	words := strings.Fields(text) // split on any whitespace into a slice of words
-	var out []string
-
+func checkFlags(text string) string {
+	words := strings.Fields(text) // split on whitespace into a slice of words
 	for i := 0; i < len(words); i++ {
-		w := words[i]
+		word := words[i]
+		if strings.HasPrefix(word, "(") { // a word starting with "(" might be a marker
+			op := ""
+			count := 1        // how many previous words to change (default 1)
+			isComplex := false // true for the two-word form like (up, 2)
 
-		// Single-token markers: (up) (low) (cap) (hex) (bin)
-		if isMarker(w) {
-			action := strings.Trim(w, "()") // "(up)" -> "up"
-			applyAction(out, action, 1)
-			continue // drop the marker itself by not appending it
-		}
+			// Simple form: "(up)" starts with "(" AND ends with ")"
+			if strings.HasSuffix(word, ")") {
+				op = strings.Trim(word, "()") // "(up)" -> "up"
+			}
 
-		// Two-token markers: "(up," followed by "2)"
-		if strings.HasPrefix(w, "(") && i+1 < len(words) && strings.HasSuffix(words[i+1], ")") {
-			action := strings.Trim(w, "(,")               // "(up," -> "up"
-			countStr := strings.TrimSuffix(words[i+1], ")") // "2)" -> "2"
-			n, _ := strconv.Atoi(countStr)
-			applyAction(out, action, n)
-			i++       // skip the count token as well
-			continue
-		}
+			// Complex form: "(up," followed by "2)"
+			if strings.HasSuffix(word, ",") && i+1 <= len(words) && strings.HasSuffix(words[i+1], ")") {
+				op = strings.Trim(word, "(,")          // "(up," -> "up"
+				numStr := strings.Trim(words[i+1], "()") // "2)" -> "2"
+				val, err := strconv.Atoi(numStr)
+				if err == nil {
+					count = val
+					isComplex = true
+				}
+			}
 
-		out = append(out, w) // a normal word, keep it
-	}
+			if op == "hex" || op == "bin" || op == "up" || op == "low" || op == "cap" {
+				// Reach BACKWARD: j=1 is the previous word, j=2 the one before, etc.
+				for j := 1; j <= count && i-j >= 0; j++ {
+					target := words[i-j]
+					switch op {
+					case "hex":
+						val, _ := strconv.ParseInt(target, 16, 64) // read as base 16
+						words[i-j] = fmt.Sprint(val)               // number -> string
+					case "bin":
+						val, _ := strconv.ParseInt(target, 2, 64) // read as base 2
+						words[i-j] = fmt.Sprint(val)
+					case "up":
+						words[i-j] = strings.ToUpper(target)
+					case "low":
+						words[i-j] = strings.ToLower(target)
+					case "cap":
+						words[i-j] = strings.Title(strings.ToLower(target)) // first letter up
+					}
+				}
 
-	result := strings.Join(out, " ")
-	result = fixPunctuation(result)
-	result = fixQuotes(result)
-	result = fixArticles(result)
-	return result
-}
-```
-
-**Key idea to say out loud:** markers reference the words *already collected* in `out`, so we apply them to the tail of `out` and never add the marker itself.
-
-### `isMarker` and `applyAction`
-
-```go
-func isMarker(w string) bool {
-	switch w {
-	case "(up)", "(low)", "(cap)", "(hex)", "(bin)":
-		return true
-	}
-	return false
-}
-
-// applyAction edits the LAST n words already collected.
-// Because slices share their backing array, editing words[idx] is permanent.
-func applyAction(words []string, action string, n int) {
-	for i := 0; i < n && i < len(words); i++ {
-		idx := len(words) - 1 - i // walk backwards from the last word
-		switch action {
-		case "up":
-			words[idx] = strings.ToUpper(words[idx])
-		case "low":
-			words[idx] = strings.ToLower(words[idx])
-		case "cap":
-			words[idx] = capitalize(words[idx])
-		case "hex":
-			words[idx] = hexToDec(words[idx])
-		case "bin":
-			words[idx] = binToDec(words[idx])
-		}
-	}
-}
-```
-
-**Why `len(words) - 1 - i`:** `len-1` is the last word, `len-2` the one before, etc. The `i < len(words)` guard stops us from indexing out of bounds if there are fewer words than `n`.
-
-### The number converters
-
-```go
-func hexToDec(s string) string {
-	n, err := strconv.ParseInt(s, 16, 64) // base 16, fits in 64-bit int
-	if err != nil {
-		return s // not valid hex -> leave it unchanged
-	}
-	return strconv.FormatInt(n, 10) // back to a base-10 string
-}
-
-func binToDec(s string) string {
-	n, err := strconv.ParseInt(s, 2, 64) // base 2
-	if err != nil {
-		return s
-	}
-	return strconv.FormatInt(n, 10)
-}
-```
-
-**The one fact they love:** `strconv.ParseInt(s, base, bitSize)`. Base 16 = hex, base 2 = binary, base 10 = decimal. It returns `(int64, error)`.
-
-### `capitalize`
-
-```go
-func capitalize(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
-	// s[:1] = first byte, s[1:] = the rest
-}
-```
-
-### Spacing rules (the fiddly part - be honest about edge cases)
-
-```go
-func fixPunctuation(text string) string {
-	for _, p := range []string{".", ",", "!", "?", ":", ";"} {
-		text = strings.ReplaceAll(text, " "+p, p) // remove the space BEFORE punctuation
-	}
-	return text
-}
-
-func fixQuotes(text string) string {
-	text = strings.ReplaceAll(text, "' ", "'") // space right after opening quote
-	text = strings.ReplaceAll(text, " '", "'") // space right before closing quote
-	return text
-}
-
-func fixArticles(text string) string {
-	words := strings.Split(text, " ")
-	for i := 0; i < len(words)-1; i++ {
-		next := words[i+1]
-		if (words[i] == "a" || words[i] == "A") && next != "" && isVowelOrH(next[0]) {
-			if words[i] == "a" {
-				words[i] = "an"
-			} else {
-				words[i] = "An"
+				// Delete the marker so it doesn't appear in the output.
+				if isComplex {
+					words = append(words[:i], words[i+2:]...) // remove 2 tokens
+				} else {
+					words = append(words[:i], words[i+1:]...) // remove 1 token
+				}
+				i-- // list got shorter, step back so we don't skip a word
 			}
 		}
 	}
 	return strings.Join(words, " ")
 }
+```
 
-func isVowelOrH(c byte) bool {
-	lower := strings.ToLower(string(c))
-	return strings.Contains("aeiouh", lower)
+**The three ideas that unlock this function:**
+
+1. **Two shapes of marker.** Simple `(up)` is one word (starts `(`, ends `)`). Complex `(up, 2)` is two words (`(up,` then `2)`). The code detects which and sets `op` and `count`.
+2. **Reaching backward.** `words[i-j]` is the j-th word *before* the marker. `j` runs from 1 up to `count`, and `i-j >= 0` stops it walking off the front. That loop IS the "affect the previous word(s)" rule.
+3. **Deleting the marker.** `words[:i]` is everything before the marker; `words[i+1:]` (or `words[i+2:]` for complex) is everything after. Glue them and the marker disappears. `i--` keeps the loop aligned after the list shrinks.
+
+**Trace `so cool (up, 2)`:** words = `["so","cool","(up,","2)"]`. At the marker `op="up"`, `count=2`. `j=1` -> `words[1]` "cool" becomes "COOL". `j=2` -> `words[0]` "so" becomes "SO". Delete the two marker tokens. Result: `SO COOL`.
+
+### `checkPunctuations` - spacing and quotes (works on characters)
+
+```go
+func checkPunctuations(text string) string {
+	var result strings.Builder
+	for i := 0; i < len(text); i++ {
+		// RULE 1: drop a space that sits right BEFORE punctuation
+		if text[i] == ' ' && i+1 < len(text) && strings.ContainsRune(".,!?:;", rune(text[i+1])) {
+			continue
+		}
+		result.WriteByte(text[i])
+		// RULE 2: add ONE space AFTER punctuation (but not inside a group like "...")
+		if strings.ContainsRune(".,!?:;", rune(text[i])) && i+1 < len(text) && !strings.ContainsRune(".,!?:; ", rune(text[i+1])) {
+			result.WriteByte(' ')
+		}
+	}
+	text = result.String()
+
+	// Opening quote: remove the space right after it. "' awesome" -> "'awesome"
+	text = strings.ReplaceAll(text, "' ", "'")
+
+	// Closing quote: remove the space right before it, when a real word ends there.
+	var sb strings.Builder
+	for i := 0; i < len(text); i++ {
+		if text[i] == ' ' && i+1 < len(text) && text[i+1] == '\'' && i > 0 {
+			prev := text[i-1]
+			isWordEnd := (prev >= 'a' && prev <= 'z') || (prev >= 'A' && prev <= 'Z') || prev == '.'
+			if isWordEnd {
+				continue // skip this space
+			}
+		}
+		sb.WriteByte(text[i])
+	}
+	return sb.String()
 }
 ```
 
-> **Honest note:** this punctuation/quote handling is the *clean, explainable* version and passes the common cases. The full spec has nastier edges (punctuation groups like `...` or `!?`, multiple quoted phrases in one line). If you have time, harden these - but for explaining your logic, this structure is exactly what they want to see, and you can say "I handle the standard cases here; the grouped-punctuation edge case would need a character-by-character scan."
+**The two rules that do all the work (first loop):**
+
+1. **No space before punctuation:** if the current char is a space and the next char is `. , ! ? : ;`, skip the space. `hello ,` -> `hello,`.
+2. **One space after punctuation:** after writing a punctuation mark, if the next char is *not* another punctuation mark or a space, add a space. `hello.World` -> `hello. World`. Because it checks "next is not also punctuation," groups like `...` and `!?` stay glued.
+
+**Quotes:** `ReplaceAll("' ", "'")` kills the space after an opening quote. The second loop kills the space before a closing quote, but only when the char before that space is a letter or `.` (so it knows it's a genuine closing quote). Together: `' awesome '` -> `'awesome'`.
+
+### `checkVowels` - a becomes an (works on words)
+
+```go
+func checkVowels(text string) string {
+	words := strings.Fields(text)
+	for i := 0; i < len(words)-1; i++ { // every word except the last
+		if (words[i] == "a" || words[i] == "A") &&
+			strings.ContainsRune("aeiouhAEIOUH", rune(words[i+1][0])) {
+			words[i] += "n" // "a" -> "an", "A" -> "An"
+		}
+	}
+	return strings.Join(words, " ")
+}
+```
+
+**Say it out loud:** "For each word that is exactly `a` or `A`, I look at the first letter of the next word. If it's a vowel or `h`, I add `n`." `words[i+1][0]` is just the first letter of the next word.
+
+## Three things so they can't surprise you
+
+1. **`i+1 <= len(words)`** in the complex check should really be `i+1 < len(words)`. `words[i+1]` is out of range when `i+1` equals the length, so a weird input ending in `(up,` could panic. It passed audit because the tests always have a word after `(up,`. One-character fix if you want it bulletproof.
+2. **`strings.Title`** is officially deprecated (still works for plain ASCII). If asked: "I know it's deprecated, but I lowercase first so it only capitalizes the first letter, and it works fine for ASCII."
+3. **`fmt.Sprint(val)`** just turns the number into a string, same result as `strconv.FormatInt(val, 10)`.
 
 ## Tricky bits checklist
 
-- Markers act on **previous** words, not following ones.
-- `(up, 2)` arrives as **two tokens** after `strings.Fields`: `(up,` and `2)`.
-- Editing a slice element inside a function is **permanent** (slices share memory) - that's why `applyAction` works without returning anything.
-- `strconv.ParseInt` returns `(value, error)` - always handle the error.
+- A marker affects the words **before** it, reached with `words[i-j]`.
+- `(up, 2)` is **two tokens** after `strings.Fields`: `(up,` and `2)`.
+- Editing `words[i-j]` changes the slice **in place** (slices share memory), so no return is needed inside the loop.
+- After deleting the marker, `i--` keeps the loop from skipping a word.
+- `checkPunctuations` works **character by character**; the other two work word by word.
 
 ## Practice - EXPLAIN IT (answer out loud)
 
-1. Why do we apply markers to `out` and not to `words`?
-2. What does `strconv.ParseInt("FF", 16, 64)` return, and what type?
-3. Why does `applyAction` not need to return the slice?
-4. Walk through `process` on the input: `a amazing thing (up, 2)`.
-5. What's `os.Args[0]`, and why do we check `len(os.Args) != 3`?
+1. In `checkFlags`, how does the code reach the words *before* the marker, and what stops it going too far back?
+2. What is the difference between the "simple" and "complex" marker, and how does the code tell them apart?
+3. After applying a marker, how does the code remove it from the output? Explain `append(words[:i], words[i+2:]...)`.
+4. In `checkPunctuations`, what are the two rules in the first loop, and how do groups like `...` stay together?
+5. Walk through `checkVowels` on `a apple` and on `a hour`.
 
 ## Practice - WRITE IT (blank file, no peeking)
 
-1. Write `hexToDec` and `binToDec` from scratch.
-2. Write `capitalize` so `"hELLo"` → `"Hello"`.
-3. Write the loop in `applyAction` that walks the last `n` words backwards.
-4. Write `fixArticles` for the `a`/`an` rule.
+1. Write the `for j := 1; j <= count && i-j >= 0; j++` loop and explain `words[i-j]`.
+2. Write the hex/bin cases of the switch from memory.
+3. Write `checkVowels` from scratch.
+4. Write the two-rule first loop of `checkPunctuations`.
 
 ---
 
